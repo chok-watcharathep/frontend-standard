@@ -25,6 +25,7 @@ Reusable feature/implementation recipes.
 
 | Standard | Status | Summary |
 | -------- | ------ | ------- |
+| [[form]] | 🟡 draft | Form pattern: react-hook-form + zod, interface-first typed schema in an i18n schema hook, Controller wiring, RQ-mutation submit with setError mapping. |
 | [[listing]] | 🟡 draft | Standard list/table page with pagination, filtering, and sorting. |
 
 ## Conventions

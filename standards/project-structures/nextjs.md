@@ -298,4 +298,5 @@ chosen CSS-framework integration standard:
 - [[add-shadcn-to-nextjs]] · [[add-mui-to-nextjs]] · [[add-antd-to-nextjs]] — choose exactly one;
   each fills the CSS-framework boundary above.
 - [[listing]] — listing/table page pattern built on this base.
+- [[form]] — form pattern (react-hook-form + zod) built on this base.
 - [[naming]] — pointer; naming is defined in this standard.

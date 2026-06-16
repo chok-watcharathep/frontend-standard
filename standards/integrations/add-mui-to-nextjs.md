@@ -516,5 +516,6 @@ index.**
 - [[nextjs]] — base structure; this standard fills its deferred CSS-framework boundary for MUI.
 - [[add-shadcn-to-nextjs]] — the shadcn UI + token layer; this standard mirrors its 3-tier token
   concept and reuses its token names (mutually exclusive with this).
-- [[add-antd-to-nextjs]] — alternative UI library; handles tokens its own way (mutually exclusive).
+- [[add-antd-to-nextjs]] — closest analog by token model: antd-style `customToken` plays the role this
+  standard's `theme.tokens.*` does. Mutually exclusive with this.
 - [[listing]] — listing/table pattern; uses these themed components.

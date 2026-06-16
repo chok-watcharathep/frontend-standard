@@ -18,7 +18,7 @@ Adding a library/tool onto an existing base.
 | -------- | ------ | ------- |
 | [[add-mui-to-nextjs]] | 🟢 stable | Add MUI (+ Emotion) to a Next.js project; owns the MUI token system (`theme.tokens.*`, 3-tier, typed). |
 | [[add-shadcn-to-nextjs]] | 🟢 stable | Add shadcn/ui + Tailwind v4 to a Next.js project; owns the shadcn 3-tier design-token system. |
-| [[add-antd-to-nextjs]] | 🟡 draft | Add Ant Design to a Next.js project (owns its own antd token approach). |
+| [[add-antd-to-nextjs]] | 🟢 stable | Add antd v5 (+ antd-style) to a Next.js project; owns the antd token system (`customToken`, 3-tier, typed). |
 
 ## Patterns
 Reusable feature/implementation recipes.

@@ -7,7 +7,7 @@ applies_to: [nextjs]
 requires: []
 conflicts_with: []
 tags: [nextjs, react, app-router, react-query, axios, scaffold, conventions]
-updated: 2026-06-12
+updated: 2026-06-16
 ---
 
 # Next.js Project Structure
@@ -51,7 +51,7 @@ Follow this exactly when scaffolding or extending a Next.js app.
 src/
   app/                 # App Router. (public)/(protected) groups → nested layout groups. page.tsx is THIN.
   components/
-    ui/                # primitive components — folder declared here, contents owned by the CSS-framework standard
+    ui/                # reusable UI components — folder declared here; contents + model owned by the CSS-framework standard (shadcn: copied primitives; MUI/antd: composite components over the lib's own primitives)
     layouts/           # shared layout components (TheMainLayout, Navbar, Footer, ...)
     icons/             # icon components, exported via index.ts
     providers/         # app-wide React providers (incl. QueryClientProvider, wired into app/layout.tsx)
@@ -266,7 +266,8 @@ ComponentName/
 This standard intentionally does **not** define any of the following — they are owned by the
 chosen CSS-framework integration standard:
 
-- Contents of `components/ui/` (primitive components).
+- Contents + component model of `components/ui/` (shadcn: copied primitives; MUI/antd: composite
+  components — their primitives come from the library directly).
 - `src/theme/` design tokens.
 - `src/libs/utils.lib.ts` (`cn()` helper).
 - Per-component styling files (`.variants.ts` / cva, `.style.ts`, etc.).

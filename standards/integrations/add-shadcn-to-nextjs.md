@@ -436,6 +436,7 @@ other animation libraries.
 ## Related standards
 
 - [[nextjs]] — base structure; this standard fills its deferred CSS-framework boundary.
-- [[add-mui-to-nextjs]], [[add-antd-to-nextjs]] — alternative UI libraries; each handles tokens its
-  own way (mutually exclusive with this).
+- [[add-mui-to-nextjs]] — alternative UI library; **mirrors this 3-tier token concept and reuses these
+  token names** (as a typed `theme.tokens.*` object instead of CSS vars). Mutually exclusive with this.
+- [[add-antd-to-nextjs]] — alternative UI library; handles tokens its own way (mutually exclusive).
 - [[listing]] — listing/table pattern; uses these primitives.

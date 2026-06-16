@@ -9,7 +9,7 @@ Base scaffolds for a whole project type.
 | Standard | Status | Summary |
 | -------- | ------ | ------- |
 | [[nextjs]] | 🟢 stable | Base Next.js (App Router) structure, conventions, data layer (RQ + axios), tooling. CSS-framework-agnostic. |
-| [[nextjs-with-payload]] | 🟡 draft | Next.js project with Payload CMS integrated in the same app. |
+| [[nextjs-with-payload]] | 🟡 draft | Next.js + embedded Payload CMS. Domain roots (frontend/payload/shared), custom-endpoint data layer, collections, migrations/seeds, logger, env. Overrides [[nextjs]]'s flat src. |
 
 ## Integrations
 Adding a library/tool onto an existing base.

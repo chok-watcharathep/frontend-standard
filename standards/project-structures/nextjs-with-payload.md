@@ -6,67 +6,633 @@ status: draft
 applies_to: [nextjs, payload]
 requires: [nextjs]
 conflicts_with: []
-tags: [nextjs, payload, cms, scaffold]
-updated: 2026-06-12
+tags: [nextjs, payload, cms, scaffold, admin, migrations, seed, endpoints]
+updated: 2026-06-16
 ---
 
 # Next.js with Payload CMS Project Structure
 
 ## Summary
 
-A Next.js project with Payload CMS embedded in the same app (shared deployment). Use when the
-app needs structured content management alongside the frontend.
+A Next.js (App Router) project with **Payload CMS embedded in the same app** — one deployment that
+serves both the public site and the Payload admin/API. Use when the app needs a structured CMS/admin
+for content editors alongside the frontend.
+
+This standard **builds on [[nextjs]]** but **overrides its top-level rule**: instead of a flat `src/`,
+a Payload app is split into **domain roots** (`frontend/`, `payload/`, `shared/`). Inside each root the
+[[nextjs]] feature-module and data-layer conventions still apply unchanged.
 
 ## When to use
 
-- The app needs an admin/CMS for content editors in the same codebase.
+- The app needs a Payload-backed admin/CMS in the same codebase as the frontend.
+- You are adding a feature, collection, or admin endpoint to an existing Payload app — match these
+  conventions.
 
 ## When not to use
 
-- No CMS needed → use [[nextjs]].
+- No CMS/admin needed → use [[nextjs]] (flat `src/`).
+- The CMS is a separate service/deployment → use [[nextjs]] for the frontend and host Payload elsewhere.
 
 ## Prerequisites
 
-- [[nextjs]] — the base Next.js structure this builds on.
+- [[nextjs]] — the base structure, naming, tooling, and the React-Query + axios data layer that each
+  domain root reuses. Read it first.
+- Theme/styling for the **admin** is owned by a separate standard — see [[add-payload-theme]]. This
+  standard leaves admin theming blank (the `payload/theme/` folder exists but its contents are defined
+  there).
 
-## Steps
+## Stack baseline
 
-1. Start from [[nextjs]], then add Payload:
-   ```bash
-   npx create-payload-app@latest
-   ```
-   > TODO: confirm whether we scaffold fresh with the Payload template or layer onto an existing [[nextjs]] app, and pin versions.
+Extends the [[nextjs]] baseline. **Core (mandated):**
 
-2. Configure the database adapter and storage.
-   > TODO: company default DB (Postgres/Mongo) and file storage (S3/local).
+| Concern          | Choice                                                                       |
+| ---------------- | ---------------------------------------------------------------------------- |
+| CMS              | Payload (latest 3.x), mounted in the same Next.js app                        |
+| Database adapter | `@payloadcms/db-postgres`, **`idType: 'uuid'`**, explicit `migrationDir`     |
+| File storage     | `@payloadcms/storage-s3` (S3-compatible)                                     |
+| Migrations       | Payload migrations, committed to the repo (no `push` in non-dev)             |
+| Logger           | Payload's pino logger; `pino-pretty` in dev (transports configured in config)|
+| Rich text        | `@payloadcms/richtext-lexical`                                               |
+| Env validation   | `zod`-validated `private-environment.config.ts` (server) + `public-environment.config.ts` (client) |
+| Type generation  | `payload generate:types` → committed `payload-types.ts`                      |
 
-3. Mount the Payload admin route and API.
+**Optional (enable as needed):** localization / i18n (e.g. `en` + `th`), `@payloadcms/plugin-seo`,
+`@payloadcms/payload-cloud`, OpenTelemetry log transport, custom field plugins, GraphQL (disabled by
+default). See [payload.config.ts](#payloadconfigts).
 
-## Resulting structure
+## Top-level structure
+
+`src/` is **not** flat here. It is split into three domain roots plus `app/` and the Payload config files:
 
 ```
-<app-name>/
-  src/
-    app/
-      (frontend)/         # public site routes
-      (payload)/          # payload admin + api routes
-    collections/          # Payload collections
-    payload.config.ts
-    ...                   # plus everything from [[nextjs]]
+src/
+  app/                         # App Router — one route group per domain root
+    (frontend)/                # public site routes        → renders frontend/ pages
+    (payload)/                 # Payload admin + REST/GraphQL API (generated mount — see below)
+  frontend/                    # the public web app (apply [[nextjs]] conventions, scoped here)
+  payload/                     # the CMS/admin app (the bulk of this standard)
+  shared/                      # code shared across roots (i18n, providers, theme, ui, utils, types)
+  payload.config.ts            # the Payload config (see dedicated section)
+  endpoints.config.ts          # aggregates every feature's custom endpoints
+  private-environment.config.ts# zod-validated server-only env (secrets, service URLs)
+  public-environment.config.ts # zod-validated client-safe env (NEXT_PUBLIC_*)
+  payload-types.ts             # GENERATED by `payload generate:types` — committed, never hand-edited
 ```
 
-> TODO: confirm collection layout and config conventions.
+- **`frontend/`** and **`shared/`** are not re-documented here: `frontend/` follows the full [[nextjs]]
+  feature-module + service→hook→transform data layer, just rooted under `frontend/` instead of `src/`.
+  Barrels, naming, and the `Route` enum all apply per [[nextjs]].
+- **`shared/`** holds cross-root code: `shared/components/` (`ui/`, `providers/`, `icons/`),
+  `shared/i18n/`, `shared/theme/` (tokens — owned by [[add-payload-theme]]), `shared/constants/`,
+  `shared/utils/`, `shared/interfaces/`, `shared/types/`, `shared/enums/`. Each subfolder has an
+  `index.ts` barrel; import via `@/shared/...`.
+- Path alias stays `@/*` → `src/*` (per [[nextjs]]).
+
+> A project may add **additional frontend app roots** (e.g. a separate portal) as sibling domain roots
+> with their own `app/(group)/`. They follow the same "scoped [[nextjs]]" rule as `frontend/`.
+
+## The `payload/` root
+
+The CMS app. Top-level subfolders:
+
+```
+payload/
+  features/{feature}/   # vertical slices (see "Feature module")
+  components/
+    ui/                 # custom admin field/cell/view components (PascalCase folder, default export)
+    providers/          # admin React providers wired into config.admin.components.providers
+  plugins/              # custom Payload plugins (e.g. field stampers) — see "Custom field plugins"
+  scripts/              # seed / migration / generator scripts wired via config `bin` (see "Scripts")
+  migrations/           # Payload migration files (generated; committed)
+  libs/                 # client lib config — adminAxiosInstance, query client
+    server.ts           # barrel for SERVER-only libs (external-service axios, client-info store)
+  utils/                # pure utils
+    server.ts           # barrel for SERVER-only utils (endpoint/handler/error/pipe helpers)
+  constants/  enums/  interfaces/  types/  hooks/  messages/
+  theme/                # admin theme — CONTENTS owned by [[add-payload-theme]] (leave blank here)
+```
+
+### Feature module
+
+A Payload feature is a **full vertical slice** — it extends the [[nextjs]] feature module with
+CMS-specific subfolders:
+
+```
+payload/features/{feature}/
+  collections/          # Payload CollectionConfig definitions       (CMS-specific)
+  endpoints.config.ts   # this feature's custom endpoints            (CMS-specific)
+  server/               # SERVER-only code                            (CMS-specific)
+    handlers/           #   endpoint handler functions (*.handler.ts)
+    hooks/              #   reusable server logic (e.g. publish-eligibility checks)
+  pages/                # custom admin views rendered by config.admin.components.views
+  components/           # admin UI components (REQUIRED, like [[nextjs]])
+  services/             # axios calls to the Payload API (client)     (per [[nextjs]])
+  hooks/                # React Query hooks (client)                  (per [[nextjs]])
+  transforms/           # pure mappers                                (per [[nextjs]])
+  interfaces/ enums/ constants/ providers/ utils/   # per [[nextjs]] (types/enums/consts strictly separated)
+```
+
+Rules from [[nextjs]] carry over: only `components/` is mandatory, create others on demand, every
+subfolder has its own `index.ts` barrel, **no feature-root barrel** (import from the subfolder).
+
+## `payload.config.ts`
+
+The single `buildConfig({...})` entry point. Mandated shape (optional blocks marked):
+
+```ts
+import { postgresAdapter } from '@payloadcms/db-postgres'
+import { s3Storage } from '@payloadcms/storage-s3'
+import { lexicalEditor, FixedToolbarFeature } from '@payloadcms/richtext-lexical'
+import path from 'path'
+import { buildConfig } from 'payload'
+import sharp from 'sharp'
+import { fileURLToPath } from 'url'
+
+import privateEnvironmentConfig from './private-environment.config'
+import { endpoints } from './endpoints.config'
+import { Users } from './payload/features/user/collections'
+import { Media } from './payload/features/media/collections'
+import { Pages } from './payload/features/page/collections'
+import { Articles } from './payload/features/article/collections'
+import { seedFirstAdminUser } from './payload/scripts/seed-first-admin-user.script'
+
+const dirname = path.dirname(fileURLToPath(import.meta.url))
+
+export default buildConfig({
+  // 1. Custom endpoints — aggregated from every feature (see endpoints.config.ts)
+  endpoints,
+
+  // 2. GraphQL disabled by default (enable only if a consumer needs it)
+  graphQL: { disable: true },
+
+  // 3. Admin: which collection authenticates, custom Nav/providers/views
+  admin: {
+    user: Users.slug,
+    importMap: { baseDir: path.resolve(dirname) },
+    components: {
+      // Nav: { path: '@/payload/components/ui/Nav' },        // optional custom nav
+      providers: [
+        // admin React providers from payload/components/providers & shared/components
+        { path: '@/payload/components', exportName: 'QueryClientProvider' },
+        { path: '@/shared/components', exportName: 'ThemeProvider' },        // see [[add-payload-theme]]
+      ],
+      // views: { ...adminCustomViews },                       // custom admin views (feature pages/)
+    },
+  },
+
+  // 4. Collections — import each from its feature's collections/ barrel
+  collections: [Users, Media, Pages, Articles],
+
+  editor: lexicalEditor({
+    features: ({ defaultFeatures }) => [...defaultFeatures, FixedToolbarFeature()],
+  }),
+
+  secret: privateEnvironmentConfig.PAYLOAD_SECRET,
+  cors: privateEnvironmentConfig.PAYLOAD_CORS?.split(',') ?? undefined,
+
+  // 5. Generated types — committed to the repo
+  typescript: { outputFile: path.resolve(dirname, 'payload-types.ts') },
+
+  // 6. Database — Postgres, uuid ids, explicit migrationDir
+  db: postgresAdapter({
+    pool: { connectionString: privateEnvironmentConfig.DATABASE_URI },
+    migrationDir: path.resolve(dirname, 'payload/migrations'),
+    idType: 'uuid',
+  }),
+
+  sharp,
+
+  // 7. Storage + optional plugins
+  plugins: [
+    s3Storage({
+      collections: { media: { prefix: privateEnvironmentConfig.S3_PREFIX } },
+      bucket: privateEnvironmentConfig.S3_BUCKET_NAME,
+      config: {
+        credentials: {
+          accessKeyId: privateEnvironmentConfig.S3_ACCESS_KEY_ID,
+          secretAccessKey: privateEnvironmentConfig.S3_SECRET_ACCESS_KEY,
+        },
+        endpoint: privateEnvironmentConfig.S3_ENDPOINT,
+        region: privateEnvironmentConfig.S3_REGION,
+        forcePathStyle: true,
+      },
+    }),
+    // seoPlugin({ ... }),                  // optional
+    // authorFields({ ... }),              // optional custom field plugin (see "Custom field plugins")
+  ],
+
+  // 8. Localization / i18n — OPTIONAL
+  // localization: { locales: [{ label: 'English', code: 'en' }, { label: 'ไทย', code: 'th' }], defaultLocale: 'en' },
+  // i18n: { supportedLanguages: { th }, translations: { th: customThTranslations } },
+
+  // 9. Logger — pino; pretty in dev, add OTel transport when observability is required
+  logger: {
+    options: {
+      transport: {
+        targets: [
+          { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:standard', ignore: 'pid,hostname' } },
+          // { target: 'pino-opentelemetry-transport', options: { ... } },   // optional
+        ],
+      },
+    },
+  },
+
+  // 10. Auto-seed on boot — OPTIONAL, gate behind an env flag
+  onInit: async (payload) => {
+    if (privateEnvironmentConfig.AUTO_SEED_DATA !== 'true') return
+    await seedFirstAdminUser(payload)
+  },
+
+  // 11. CLI scripts — wired here, exposed as pnpm scripts (see "Scripts")
+  bin: [
+    { scriptPath: path.resolve(dirname, 'payload/scripts/seed-first-admin-user.script.ts'), key: 'seed:first-admin-user' },
+  ],
+})
+```
+
+**Rules for the config:**
+
+- `collections` and `endpoints` are **never** declared inline — they are imported from feature
+  `collections/` barrels and aggregated in `endpoints.config.ts` respectively.
+- Use Postgres with `idType: 'uuid'` and an explicit `migrationDir`.
+- `secret`, DB URI, S3 creds, CORS, and the auto-seed flag come from `private-environment.config.ts`.
+- Keep GraphQL disabled unless a consumer requires it.
+
+### `endpoints.config.ts`
+
+Top-level aggregator — concatenates every feature's exported `endpoints` array. Add one line per feature:
+
+```ts
+import { endpoints as articleEndpoints } from './payload/features/article/endpoints.config'
+import { endpoints as userEndpoints } from './payload/features/user/endpoints.config'
+
+export const endpoints = [...articleEndpoints, ...userEndpoints]
+```
+
+## Data layer
+
+Two read paths, **one client axios instance** (`adminAxiosInstance`, baseURL = the Payload API), two
+path/naming conventions:
+
+| Path                | Hits                                          | Service prefix      | Hook prefix              |
+| ------------------- | --------------------------------------------- | ------------------- | ------------------------ |
+| Built-in collection | Payload REST `/{collection}` (direct CRUD)    | `adminPayloadGet*`  | `useAdminPayloadGet*`    |
+| Custom endpoint     | feature `/admin/*` (business logic, BFF)      | `adminGet*` / `adminCreate*` … | `useAdminGet*` |
+
+`adminAxiosInstance` lives in `payload/libs/axios.lib.ts` (uses the `fetch` adapter, `cache: 'no-store'`);
+the admin React Query client is in `payload/libs/query-client.lib.ts`.
+
+### Built-in collection access (`adminPayloadGet*`)
+
+Query Payload's own REST API directly with `qs`-serialized `where`/`depth`/`limit`:
+
+```ts
+// payload/features/article/services/article.service.ts
+import { isAxiosError } from 'axios'
+import qs from 'qs'
+import { adminAxiosInstance } from '@/payload/libs'
+import type { AdminPayloadGetArticleListResponse } from '@/payload/features/article/interfaces'
+
+export const adminPayloadGetArticleList = async (ids: string[]) => {
+  try {
+    const { data } = await adminAxiosInstance.get<AdminPayloadGetArticleListResponse>('/articles', {
+      params: { where: { id: { in: ids } }, limit: ids.length || 1 },
+      paramsSerializer: { serialize: (params) => qs.stringify(params) },
+    })
+    return data
+  } catch (error) {
+    if (isAxiosError(error)) throw error.response?.data
+    throw error
+  }
+}
+```
+
+### Custom endpoints (full recipe)
+
+For business logic, validation, permissions, or aggregation, define a **custom endpoint** rather than
+querying collections from the client.
+
+**1. Declare the endpoint** — `payload/features/article/endpoints.config.ts`. Wrap with `defineEndpoint`
+(binds Request/Response types for OpenAPI generation) and compose middleware with `pipeHandlers`:
+
+```ts
+import type { Endpoint } from 'payload'
+import {
+  defineEndpoint,
+  pipeHandlers,
+  withLoggerHandler,
+  withClientInfoHandler,
+  withAuthHandler,
+} from '@/payload/utils/server'
+import { AdminPermission } from '@/payload/enums'
+import { getArticles, createArticle } from './server/handlers'
+import type {
+  AdminGetArticleListRequest, AdminGetArticleListResponse,
+  AdminCreateArticleRequest, AdminCreateArticleResponse,
+} from './interfaces'
+
+export const endpoints: Endpoint[] = [
+  defineEndpoint<AdminGetArticleListRequest, AdminGetArticleListResponse>({
+    path: '/admin/articles',
+    method: 'get',
+    handler: pipeHandlers(
+      withLoggerHandler,
+      withClientInfoHandler,
+      withAuthHandler([AdminPermission.VIEW_ARTICLE]),
+    )(getArticles),
+  }),
+  defineEndpoint<AdminCreateArticleRequest, AdminCreateArticleResponse>({
+    path: '/admin/articles',
+    method: 'post',
+    handler: pipeHandlers(
+      withLoggerHandler,
+      withClientInfoHandler,
+      withAuthHandler([AdminPermission.CREATE_ARTICLE]),
+    )(createArticle),
+  }),
+]
+```
+
+`pipeHandlers(...)` composes HOCs **right-to-left** (rightmost wraps the handler first); at runtime they
+run **left-to-right**: logger → client-info → auth → handler. The shared middleware HOCs live in
+`payload/utils/server.ts`:
+
+- `withLoggerHandler` — structured request log (with trace context).
+- `withClientInfoHandler` — stashes ip / user-agent / correlation-id in an `AsyncLocalStorage` store.
+- `withAuthHandler(permissions: AdminPermission[])` — rejects unauthenticated requests; checks permissions.
+- `withApiKeyHandler` — for machine-to-machine endpoints (constant-time key compare).
+
+**2. Write the handler** — `payload/features/article/server/handlers/article.handler.ts`. Use the
+**Local API** (`req.payload`) and return with `Response.json`; funnel every error through
+`handleErrorResponse` and throw the typed exceptions (`BadRequestException`, `NotFoundException`, …):
+
+```ts
+import { addDataAndFileToRequest, type PayloadRequest } from 'payload'
+import { BadRequestException, handleErrorResponse } from '@/payload/utils/server'
+import { ArticleErrorCode } from '@/payload/features/article/enums'
+
+export const getArticles = async (req: PayloadRequest) => {
+  try {
+    const result = await req.payload.find({ collection: 'articles', where: req.query })
+    return Response.json(result)
+  } catch (error) {
+    return handleErrorResponse(error, req)
+  }
+}
+
+export const createArticle = async (req: PayloadRequest) => {
+  try {
+    await addDataAndFileToRequest(req)
+    if (!req.data) {
+      throw new BadRequestException({
+        code: ArticleErrorCode.VALIDATION_FAILED,
+        message: 'Missing required parameters',
+        subErrors: [],
+      })
+    }
+    const created = await req.payload.create({ collection: 'articles', data: req.data })
+    return Response.json({ id: created.id })
+  } catch (error) {
+    return handleErrorResponse(error, req)
+  }
+}
+```
+
+> **Default = Local API.** Handlers read/write Payload via `req.payload.find/create/update`.
+
+> **Variant — gateway / BFF (optional).** When the admin proxies an **external core service** and mirrors
+> results into Payload, add a server-only axios instance in `payload/libs/server.ts` and call it from the
+> handler, persisting a `masterId` link on the collection record. Use this **only** for projects that
+> front external microservices — it is not the default:
+> ```ts
+> import { coreServiceAxiosInstance } from '@/payload/libs/server'
+> // const { data } = await coreServiceAxiosInstance.post('/articles', body, { user: req.user })
+> // await req.payload.create({ collection: 'articles', data: { ...body, masterId: data.id } })
+> ```
+
+**3. Client service** — calls the custom endpoint via `adminAxiosInstance` (same error-normalizing shape
+as [[nextjs]] services), named `adminGet{Entity}` / `adminCreate{Entity}`.
+
+**4. React Query hook** — `payload/features/article/hooks/useAdminGetArticleList.ts`, **default export**,
+`queryKey` from the feature's `QueryKey` enum:
+
+```ts
+import { useQuery, type UseQueryOptions } from '@tanstack/react-query'
+import { ArticleQueryKey } from '@/payload/features/article/enums'
+import { adminGetArticleList } from '@/payload/features/article/services'
+import type { AdminGetArticleListRequest, AdminGetArticleListResponse } from '@/payload/features/article/interfaces'
+
+const useAdminGetArticleList = (
+  request: AdminGetArticleListRequest,
+  options?: Omit<UseQueryOptions<AdminGetArticleListResponse, Error>, 'queryKey' | 'queryFn'>,
+) =>
+  useQuery<AdminGetArticleListResponse, Error>({
+    queryKey: [ArticleQueryKey.ADMIN_GET_ARTICLE_LIST, request],
+    queryFn: () => adminGetArticleList(request),
+    ...options,
+  })
+
+export default useAdminGetArticleList
+```
+
+`server/hooks/` holds reusable **server-side** logic shared by handlers and collection hooks (e.g. a
+`checkPublishable{Entity}` eligibility check) — not React hooks.
+
+## Collections
+
+One collection per file, in the owning feature's `collections/` folder:
+
+```
+payload/features/page/collections/
+  page.collection.ts     # export default Pages  (a CollectionConfig)
+  index.ts               # export { default as Pages } from './page.collection'
+```
+
+```ts
+// page.collection.ts
+import type { CollectionConfig } from 'payload'
+
+const Pages: CollectionConfig = {
+  slug: 'pages',                       // kebab-case, stable (DB tables + REST paths depend on it)
+  access: { read: () => true },        // access control
+  admin: { useAsTitle: 'name' },
+  labels: { singular: { en: 'Page', th: 'หน้า' }, plural: { en: 'Pages', th: 'หน้า' } },  // labels optional/i18n
+  fields: [
+    { name: 'name', type: 'text', required: true },
+    { name: 'slug', type: 'text', required: true, unique: true },
+  ],
+}
+
+export default Pages
+```
+
+- Export name is **PascalCase plural** (`Pages`, `Articles`); `slug` is **kebab-case** and stable.
+- Register the collection in `payload.config.ts` `collections: [...]` by importing from the barrel.
+- After any field/collection change, regenerate types (see Gotchas).
+
+## Migrations, seeds & scripts
+
+### Scripts & seeds
+
+Seed/generator scripts live in `payload/scripts/` as `{name}.{seed|script}.ts`. A seed exports **both** a
+reusable function (so `onInit` can call it) **and** a `script(config)` entry (so the Payload CLI can run it):
+
+```ts
+// payload/scripts/seed-first-admin-user.script.ts
+import payload, { type Payload, type SanitizedConfig } from 'payload'
+
+export const seedFirstAdminUser = async (payloadInstance: Payload) => {
+  const existing = await payloadInstance.find({ collection: 'users', limit: 1, overrideAccess: true })
+  if (existing.docs.length > 0) return                       // idempotent
+  await payloadInstance.create({ collection: 'users', data: { /* ... */ }, overrideAccess: true })
+  payloadInstance.logger.info('First admin user seeded!')
+}
+
+export const script = async (config: SanitizedConfig) => {
+  await payload.init({ config })
+  await seedFirstAdminUser(payload)
+}
+```
+
+Wire each script in `payload.config.ts` `bin: [{ scriptPath, key }]`, then add a matching `pnpm` script
+that delegates to the Payload CLI (`payload <key>`):
+
+```jsonc
+// package.json
+{
+  "scripts": {
+    "payload": "payload",
+    "seed:first-admin-user": "payload seed:first-admin-user",  // key must match the bin entry
+    "generate:types": "payload generate:types",
+    "generate:importmap": "payload generate:importmap"
+  }
+}
+```
+
+- Seeds must be **idempotent** (check-before-create).
+- For boot-time seeding, call the exported function from `onInit`, gated behind an env flag
+  (`AUTO_SEED_DATA`), and never let a seed failure crash boot (log and continue).
+
+### Migrations
+
+Payload migrations are committed to `payload/migrations/`. Standard `pnpm` scripts:
+
+```jsonc
+{
+  "scripts": {
+    "migrate:create": "payload migrate:create",   // generate a migration from schema changes
+    "migrate": "payload migrate",                  // run pending migrations
+    "migrate:down": "payload migrate:down"         // roll back the last batch
+  }
+}
+```
+
+- **Never** rely on dev `push` outside local development — generate and commit a migration.
+- Run `migrate` on deploy before the app serves traffic.
+
+## Environment config
+
+Validate env at module load with `zod` and import the typed object everywhere — never read
+`process.env` directly:
+
+```ts
+// private-environment.config.ts  (SERVER ONLY — secrets, DB, S3, service URLs)
+import { z } from 'zod'
+
+const environmentSchema = z.object({
+  DATABASE_URI: z.string(),
+  PAYLOAD_SECRET: z.string(),
+  S3_ACCESS_KEY_ID: z.string(),
+  S3_SECRET_ACCESS_KEY: z.string(),
+  S3_BUCKET_NAME: z.string(),
+  S3_REGION: z.string(),
+  S3_ENDPOINT: z.string(),
+  S3_PREFIX: z.string(),
+  PAYLOAD_CORS: z.string().optional(),
+  AUTO_SEED_DATA: z.string().optional(),
+  // ...service URLs / secrets for the gateway variant, OTel, etc.
+})
+
+export default environmentSchema.parse(process.env)
+```
+
+`public-environment.config.ts` mirrors this for `NEXT_PUBLIC_*` client-safe values (e.g.
+`NEXT_PUBLIC_PAYLOAD_API_ENDPOINT` used by `adminAxiosInstance`).
+
+## `app/(payload)` mount & generated files
+
+The `(payload)` route group is the **Payload Next.js integration mount** — scaffolded by
+`create-payload-app` (or copied from Payload's template) and **not hand-authored**:
+
+```
+app/(payload)/
+  layout.tsx                       # Payload RootLayout
+  admin/
+    [[...segments]]/page.tsx       # admin UI catch-all
+    importMap.js                   # GENERATED by `payload generate:importmap`
+  api/
+    [...slug]/route.ts             # REST API (your collections + custom endpoints)
+    graphql/route.ts  graphql-playground/route.ts   # present even with GraphQL disabled
+```
+
+- After adding/removing admin components referenced by string path in the config, run
+  `pnpm generate:importmap`.
+- After any collection/field change, run `pnpm generate:types` and commit `payload-types.ts`.
+
+## Custom field plugins (optional)
+
+Reusable field/behaviour injection lives in `payload/plugins/{plugin}/`:
+
+```
+payload/plugins/author-fields/
+  author-fields.plugin.ts      # (options) => (config) => Config — pushes fields + beforeChange hook
+  useStampAuthorFields.hook.ts # the collection hook it installs
+  index.ts
+```
+
+A plugin takes options, returns `(config: Config) => Config`, and honours a `disabled` flag. Register it
+in `payload.config.ts` `plugins: [...]`. Use this for cross-collection concerns (audit/author stamps,
+publisher metadata) instead of repeating fields per collection.
 
 ## Rules
 
-- ✅ Do: keep frontend and CMS concerns in separate route groups.
-- ❌ Don't: import Payload server code into client components.
+- ✅ Do: split `src/` into `frontend/` · `payload/` · `shared/` domain roots; apply [[nextjs]]
+  conventions **inside** each root.
+- ✅ Do: aggregate `collections` from feature `collections/` barrels and `endpoints` via
+  `endpoints.config.ts` — never declare them inline in the config.
+- ✅ Do: put admin business logic in **custom endpoints** (`defineEndpoint` + `pipeHandlers` + handler
+  using the Local API), not in client components.
+- ✅ Do: keep seeds idempotent and wire them through `bin` + `pnpm` + (optionally) `onInit`.
+- ✅ Do: read env only via the zod-validated config objects; keep secrets in `private-environment.config.ts`.
+- ✅ Do: commit `payload-types.ts` and migrations; regenerate after schema changes.
+- ❌ Don't: revert to a flat `src/` — that's [[nextjs]] without Payload.
+- ❌ Don't: import Payload server code (`req.payload`, handlers, `payload/libs/server`,
+  `payload/utils/server`) into client components.
+- ❌ Don't: query collections from the client when the operation needs auth/validation/aggregation — use
+  a custom endpoint.
+- ❌ Don't: hand-edit the generated `(payload)` mount, `importMap.js`, or `payload-types.ts`.
+- ❌ Don't: define admin theming here — defer to [[add-payload-theme]].
 
 ## Gotchas
 
-- Payload config and generated types must stay in sync; regenerate types after schema changes.
+- **Types drift.** `payload-types.ts` is generated; run `pnpm generate:types` and commit after every
+  field/collection change, or handlers and services type-check against a stale schema.
+- **Import map drift.** Admin components referenced by string path won't load until
+  `pnpm generate:importmap` is re-run.
+- **Slugs are load-bearing.** A collection `slug` maps to DB tables and REST paths — renaming one is a
+  breaking change requiring a migration.
+- **Server/client boundary.** `payload/utils/server.ts` and `payload/libs/server.ts` are server-only;
+  importing them into a client component breaks the build.
+- **Middleware order.** `pipeHandlers` composes right-to-left; list HOCs in run order
+  (logger → client-info → auth) — the handler runs last.
+- **Don't crash on seed failure** in `onInit`; log and continue so a bad seed doesn't block boot.
 
 ## Related standards
 
-- [[nextjs]] — base structure.
+- [[nextjs]] — the base structure, naming, tooling, and data layer each domain root reuses.
+- [[add-payload-theme]] — admin theming / design tokens (the `theme/` boundary left blank here).
+- [[add-shadcn-to-nextjs]] · [[add-mui-to-nextjs]] · [[add-antd-to-nextjs]] — CSS framework for the
+  **frontend** root (choose one, per [[nextjs]]).
 - [[naming]] — naming conventions.
+</content>
+</invoke>

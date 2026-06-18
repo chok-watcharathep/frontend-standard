@@ -121,9 +121,13 @@ CMS-specific subfolders:
 payload/features/{feature}/
   collections/          # Payload CollectionConfig definitions       (CMS-specific)
   endpoints.config.ts   # this feature's custom endpoints            (CMS-specific)
-  server/               # SERVER-only code                            (CMS-specific)
+  server/               # SERVER-only code — see [[server-data-layer]]   (CMS-specific)
+    auth-strategies/    #   Payload auth.strategies (→ [[add-keycloak-auth-to-payload]])
     handlers/           #   endpoint handler functions (*.handler.ts)
-    hooks/              #   reusable server logic (e.g. publish-eligibility checks)
+    hooks/              #   Payload collection lifecycle hooks (use*, default export)
+    schemas/            #   zod request schemas (*.schema.ts)
+    services/           #   server-side external-service calls (+ __mocks__/)
+    utils/              #   feature-local server utils (*.util.ts)
   pages/                # custom admin views rendered by config.admin.components.views
   components/           # admin UI components (REQUIRED, like [[nextjs]])
   services/             # axios calls to the Payload API (client)     (per [[nextjs]])
@@ -353,50 +357,19 @@ export const endpoints: Endpoint[] = [
 ]
 ```
 
-`pipeHandlers(...)` composes HOCs **right-to-left** (rightmost wraps the handler first); at runtime they
-run **left-to-right**: logger → client-info → auth → handler. The shared middleware HOCs live in
-`payload/utils/server.ts`:
+`pipeHandlers(...)` composes the middleware HOCs (`withLoggerHandler`, `withClientInfoHandler`,
+`withAuthHandler`, `withApiKeyHandler`); list them in run order (logger → client-info → auth →
+handler).
 
-- `withLoggerHandler` — structured request log (with trace context).
-- `withClientInfoHandler` — stashes ip / user-agent / correlation-id in an `AsyncLocalStorage` store.
-- `withAuthHandler(permissions: AdminPermission[])` — rejects unauthenticated requests; checks permissions.
-- `withApiKeyHandler` — for machine-to-machine endpoints (constant-time key compare).
+**2. Write the handler** — `payload/features/article/server/handlers/article.handler.ts`: validate
+the request, use the **Local API** (`req.payload`), return `Response.json`, and funnel every error
+through `handleErrorResponse`.
 
-**2. Write the handler** — `payload/features/article/server/handlers/article.handler.ts`. Use the
-**Local API** (`req.payload`) and return with `Response.json`; funnel every error through
-`handleErrorResponse` and throw the typed exceptions (`BadRequestException`, `NotFoundException`, …):
-
-```ts
-import { addDataAndFileToRequest, type PayloadRequest } from 'payload'
-import { BadRequestException, handleErrorResponse } from '@/payload/utils/server'
-import { ArticleErrorCode } from '@/payload/features/article/enums'
-
-export const getArticles = async (req: PayloadRequest) => {
-  try {
-    const result = await req.payload.find({ collection: 'articles', where: req.query })
-    return Response.json(result)
-  } catch (error) {
-    return handleErrorResponse(error, req)
-  }
-}
-
-export const createArticle = async (req: PayloadRequest) => {
-  try {
-    await addDataAndFileToRequest(req)
-    if (!req.data) {
-      throw new BadRequestException({
-        code: ArticleErrorCode.VALIDATION_FAILED,
-        message: 'Missing required parameters',
-        subErrors: [],
-      })
-    }
-    const created = await req.payload.create({ collection: 'articles', data: req.data })
-    return Response.json({ id: created.id })
-  } catch (error) {
-    return handleErrorResponse(error, req)
-  }
-}
-```
+> **The server side — `server/` folders, the middleware HOCs, `defineEndpoint`/`pipeHandlers`, the
+> typed exceptions + `handleErrorResponse`, and the full handler recipe — is owned by
+> [[server-data-layer]].** Read it for the handler/schema/service/hook conventions and the
+> `payload/utils/server.ts` implementations. Admin authentication (login/refresh/logout, custom auth
+> strategies) is [[add-keycloak-auth-to-payload]].
 
 > **Default = Local API.** Handlers read/write Payload via `req.payload.find/create/update`.
 
@@ -435,8 +408,9 @@ const useAdminGetArticleList = (
 export default useAdminGetArticleList
 ```
 
-`server/hooks/` holds reusable **server-side** logic shared by handlers and collection hooks (e.g. a
-`checkPublishable{Entity}` eligibility check) — not React hooks.
+`server/hooks/` holds **Payload collection lifecycle hooks** (`CollectionBeforeChangeHook`, etc.) —
+`use`-prefixed and default-exported, deliberately distinct from client React hooks. See
+[[server-data-layer]] for the full `server/` taxonomy.
 
 ## Collections
 
@@ -636,5 +610,7 @@ publisher metadata) instead of repeating fields per collection.
 - [[naming]] — naming conventions.
 - [[code-quality-tooling]] — lint/format/git-hooks; see its **When using Payload** callout for the
   extra ESLint/Prettier ignores Payload's generated files need.
+- [[server-data-layer]] — the feature `server/` folder + `payload/utils/server.ts` foundations.
+- [[add-keycloak-auth-to-payload]] — admin authentication via a custom auth strategy.
 </content>
 </invoke>

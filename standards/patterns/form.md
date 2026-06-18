@@ -287,5 +287,7 @@ features/{feature}/
 - [[nextjs]] — feature module, interfaces rule, and the React-Query + axios data layer for submission.
 - [[add-mui-to-nextjs]] · [[add-antd-to-nextjs]] · [[add-shadcn-to-nextjs]] — supply the field components.
 - [[listing]] — filter forms in a listing follow this pattern.
+- [[server-data-layer]] — server-side request validation is schema-first (zod), contrasting this
+  pattern's interface-first form schema.
 - [[naming]] — file/symbol naming.
 </content>

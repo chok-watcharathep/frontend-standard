@@ -292,4 +292,6 @@ chosen CSS-framework integration standard:
   each fills the CSS-framework boundary above.
 - [[listing]] — listing/table page pattern built on this base.
 - [[form]] — form pattern (react-hook-form + zod) built on this base.
+- [[server-data-layer]] — server-side counterpart to this base's client data layer (Payload).
+- [[code-quality-tooling]] — lint/format/git-hooks/editor config applied on this base.
 - [[naming]] — pointer; naming is defined in this standard.

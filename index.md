@@ -34,3 +34,4 @@ Cross-cutting rules applied across many standards.
 | Standard | Status | Summary |
 | -------- | ------ | ------- |
 | [[naming]] | 🟢 stable | Pointer → naming conventions defined in [[nextjs]]. |
+| [[code-quality-tooling]] | 🟡 draft | ESLint v9 flat config, Prettier, Husky (pre-commit/commit-msg/pre-push), lint-staged, commit-message & branch-name conventions, and shared `.vscode/`. Applies on top of [[nextjs]]. |

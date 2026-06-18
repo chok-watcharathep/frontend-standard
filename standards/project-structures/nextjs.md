@@ -247,19 +247,12 @@ ComponentName/
 ## Tooling & config
 
 - **pnpm only.**
-- **Prettier:** single quotes, no semicolons, trailing comma `all`, `printWidth: 100`.
-  Format-on-save enabled (Prettier default formatter + ESLint `fixAll`).
-- **ESLint:** `eslint-config-next`. No `any`.
-- **Husky:**
-  | Hook         | Runs                                                       |
-  | ------------ | ---------------------------------------------------------- |
-  | `pre-commit` | `lint-staged` → ESLint `--fix` + Prettier on staged files  |
-  | `commit-msg` | Enforces `<Type>: <message>` (PascalCase type)             |
-  | `pre-push`   | `pnpm type-check`                                          |
-- **Commit types** (case-sensitive): `Fix` · `Feat` · `Docs` · `Style` · `Refactor` · `Perf` ·
-  `Test` · `Chore`. Example: `Feat: add product listing`. Merge commits allowed.
-- **Scripts:** `dev` · `build` · `start` · `lint` · `lint:fix` · `format` · `format:check` ·
-  `type-check`.
+- **Lint / format / git hooks / editor config** → owned by [[code-quality-tooling]] (ESLint flat
+  config, Prettier, Husky `pre-commit`/`commit-msg`/`pre-push`, lint-staged, commit-message &
+  branch-name conventions, `.vscode/`). Apply it after this scaffold.
+- **Scripts:** this scaffold owns `dev` · `build` · `start` · `type-check`. The
+  `lint` · `lint:fix` · `format` · `format:check` · `prepare` scripts are added by
+  [[code-quality-tooling]]; `pre-push` reuses `type-check`.
 
 ## CSS-framework boundary (deferred)
 

@@ -634,5 +634,7 @@ publisher metadata) instead of repeating fields per collection.
 - [[add-shadcn-to-nextjs]] · [[add-mui-to-nextjs]] · [[add-antd-to-nextjs]] — CSS framework for the
   **frontend** root (choose one, per [[nextjs]]).
 - [[naming]] — naming conventions.
+- [[code-quality-tooling]] — lint/format/git-hooks; see its **When using Payload** callout for the
+  extra ESLint/Prettier ignores Payload's generated files need.
 </content>
 </invoke>
